@@ -66,11 +66,11 @@ class GitLabPipelineActions
     pupmod_projects = projects.select{|x| x['name'] =~ /\Apupmod-simp/}
     warn pupmod_projects.map{|x| x['name']}.sort
 
-    foo = projects.map do |project|
+    target_project_pipelines = projects.map do |project|
       project_ref_pipelines(project, ref, ['pending', 'running'])
     end
 
-    project_pipelines = Hash[foo.reject(&:nil?)]
+    project_pipelines = Hash[target_project_pipelines.reject(&:nil?)]
     project_pipelines.each do |proj_name, pipelines|
       project =  projects.select{ |x| x['name'] == proj_name }.first
       pipelines.each do |pipeline|
