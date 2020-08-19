@@ -42,20 +42,26 @@ class GitLabPipelineActions
     end
   end
 
-  def project_ref_pipelines( project, ref, scopes=['pending','running'] )
+  # scopes can be:
+  def project_ref_pipelines( project, ref, scopes=[] )
     pipelines = []
     warn "- looking up running/pending pipelines for project '#{project['name']}"
-    pipelines += @client.pipelines(project['id'], scope: 'running', ref: ref)
-    pipelines += @client.pipelines(project['id'], scope: 'pending', ref: ref)
+    if scopes.empty?
+      pipelines += @client.pipelines(project['id'], scope: 'running', ref: ref)
+    else
+      scopes.each do |scope|
+        pipelines += @client.pipelines(project['id'], scope: scope, ref: ref)
+      end
+    end
  #   require 'pry'; binding.pry unless pipelines.empty?
     [project['name'], pipelines] unless pipelines.empty?
   end
 
 
+  # cancel pipeline jobs for ref named `ref` across all of the group's projects
   def cancel!(ref = 'SIMP-7974')
     warn( "acquiring group projects")
-    projects = @client_helper.projects_for_group
-    projects = select_projects( projects, SKIPPED_PROJECTS )
+    projects = select_projects( @client_helper.projects_for_group, SKIPPED_PROJECTS )
 
     pupmod_projects = projects.select{|x| x['name'] =~ /\Apupmod-simp/}
     warn pupmod_projects.map{|x| x['name']}.sort
