@@ -52,13 +52,13 @@ class GitLabGroupGithubIntegration
         require 'pry'; binding.pry
       end
 
-      github_integration = raw_github_integration.to_h
-      gh_int = !github_integration['id'].nil?
-      gh_int_status = gh_int ? github_integration['properties']['repository_url'] : '**NO GITHUB INTEGRATION**'
-      puts "    #{gh_int_status}"
+      github_integration        = raw_github_integration.to_h
+      has_github_integration    = !github_integration['id'].nil?
+      github_integration_status = has_github_integration ? github_integration['properties']['repository_url'] : '**NO GITHUB INTEGRATION**'
+      puts "    #{github_integration_status}"
 
       # puts "   - #{project['web_url']}/-/settings/integrations"
-      unless gh_int
+      unless has_github_integration
         skip = dry_run
         puts "   - #{project['web_url']}"
         if skip
@@ -71,8 +71,8 @@ class GitLabGroupGithubIntegration
         begin
           @client.change_service(project['id'], :github, { token: token, repository_url: github_url, static_context: true })
           github_integration = @client.service(project['id'], 'github').to_h
-          gh_int_status = !github_integration['id'].nil? ? github_integration['properties']['repository_url'] : '**NO GITHUB INTEGRATION**'
-          puts "  -- Updated: #{project['name'].ljust(name_padding-11)}   #{gh_int_status}"
+          github_integration_status = !github_integration['id'].nil? ? github_integration['properties']['repository_url'] : '**NO GITHUB INTEGRATION**'
+          puts "  -- Updated: #{project['name'].ljust(name_padding-11)}   #{github_integration_status}"
         rescue Gitlab::Error::Forbidden => e
           warn
           warn 'ERROR: Failed to set up missing Gitlab CI/CD <-> GitHub Integration!'
@@ -91,4 +91,6 @@ end
 
 options = GitLabClientOptionsParser.new.parse!
 github_integrations_for_gitlab_group = GitLabGroupGithubIntegration.new(options)
-github_integrations_for_gitlab_group.ensure!
+
+# Default to dry run, unless DRY_RUN is set to 'yes'
+github_integrations_for_gitlab_group.ensure! ( ENV['DRY_RUN'].nil? || ENV['DRY_RUN'] == 'yes')

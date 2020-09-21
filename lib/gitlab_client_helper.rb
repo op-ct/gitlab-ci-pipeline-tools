@@ -51,7 +51,7 @@ class GitLabClientOptionsParser
         @options[:verbose] = v
       end
 
-      opts.on('-h', '--help', 'Print this menu') do
+      opts.on('-h', '--help', 'Print (this) help message') do
         puts opts
         exit
       end
