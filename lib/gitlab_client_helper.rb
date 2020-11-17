@@ -17,10 +17,13 @@ class GitLabClientOptionsParser
 
   def parse!
     OptionParser.new do |opts|
-      program = File.basename(__FILE__)
       opts.banner = [
-        "Usage: #{program} [OPTIONS] -t USER_GITLAB_API_TOKEN",
-        "       GITLAB_TOKEN=USER_GITLAB_API_TOKEN #{program} [OPTIONS]"
+        'Usage:',
+        '',
+        "       GITLAB_TOKEN=xxx \\",
+        "       [GITHUB_GITLAB_EXTERNAL_CICD_TOKEN=yyy] \\",
+        "          #{$PROGRAM_NAME} [OPTIONS]",
+        '',
       ].join("\n")
 
       opts.separator("\n")
@@ -35,10 +38,6 @@ class GitLabClientOptionsParser
         'Which pipeline to grab: latest, latest-tag, or master',
         "Defaults to '#{@options[:report_on]}'") do |p|
         @options[:report_on] = p
-      end
-
-      opts.on('-t', '--token=val', String, 'GitLab API token') do |t|
-        @options[:token] = t
       end
 
       opts.on('-e', '--endpoint=val', String,
@@ -58,9 +57,7 @@ class GitLabClientOptionsParser
     end.parse!
 
     # allow environment variables for these two options in particular
-    unless @options[:token]
-      @options[:token] = ENV['GITLAB_TOKEN'] || ENV['GITLAB_API_PRIVATE_TOKEN']
-    end
+    @options[:token] = ENV['GITLAB_TOKEN'] || ENV['GITLAB_API_PRIVATE_TOKEN']
 
     @options
   end
@@ -91,7 +88,7 @@ class GitLabClientHelper
   # @raise [RuntimeError] if the project was not found under the group
   def project_under_group(project_name,group_name=@options[:group])
     grp = group(group_name)
-    r = grp.search_in_group( grp['id'], 'projects', project_name )
+    r = client.search_in_group( grp['id'], 'projects', project_name )
     fail ("Expected 1 project to match '#{project}'") unless r.size == 1
     r.first.to_h
   end

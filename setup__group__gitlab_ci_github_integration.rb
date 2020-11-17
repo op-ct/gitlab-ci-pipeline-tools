@@ -8,10 +8,11 @@ class GitLabGroupGithubIntegration
     /activemq/,
     /augeasproviders/,
     /binford2k-node_encrypt/,
+    /gitlab-oss/,
     /jenkins/,
-    /puppetlabs-/,
-    /puppet-/,
     /mcollective/,
+    /puppet-/,
+    /puppetlabs-/,
     /remote-gitlab-ci/,
     /\Areleng-misc\Z/,
     /\Asimp-integration-test\Z/,
@@ -24,23 +25,42 @@ class GitLabGroupGithubIntegration
     @client        = @client_helper.client
   end
 
-  def ensure!(dry_run = true)
-    warn( "acquiring group projects")
-    projects = @client_helper.projects_for_group
-
-    warn("checking github service integration")
-    token = ENV['GITHUB_GITLAB_EXTERNAL_CICD_TOKEN']
-    # TODO: move this into a method so it doesn't fail when we don't need it
-    if token.to_s.empty?
+  def github_token
+    return @github_token if @github_token
+    @github_token = ENV['GITHUB_GITLAB_EXTERNAL_CICD_TOKEN']
+    if github_token.to_s.empty?
       fail 'No token found in GITHUB_GITLAB_EXTERNAL_CICD_TOKEN'
     end
+    @github_token
+  end
+
+  def ensure_projects!(project_names, dry_run)
+    name_padding = project_names.map{|x| x.to_s.size }.max + 2
+
+    project_names.map do |project_name|
+      warn( "acquiring group project '#{project_name}'")
+      project = @client_helper.project_under_group( project_name )
+      result = ensure_project!(project, name_padding, dry_run, true)
+    require 'pry'; binding.pry
+    end
+  end
+
+
+  def ensure!(dry_run)
+    warn( "acquiring group projects")
+    projects = @client_helper.projects_for_group
+    warn("checking github service integration")
 
     name_padding = projects.map{|x| x['name'].to_s.size }.max + 2
+    projects.map do |project|
+      ensure_project!(project, name_padding, dry_run, force)
+    end
+  end
 
-    projects.each do |project|
+  def ensure_project!( project, name_padding, dry_run, force=false )
       if SKIPPED_PROJECTS.any?{ |re| re =~ project['name'] }
         warn( "!! SKIPPING #{project['name']} (matches SKIPPED_PROJECTS)" )
-        next
+        return
       end
       print "== #{project['name'].ljust(name_padding)}"
 
@@ -48,7 +68,7 @@ class GitLabGroupGithubIntegration
       raw_github_integration = @client.service(project['id'], :github)
       unless raw_github_integration
         puts " !!!!!! client.service(project['id'], :github) returned false (investigate later) !!!!"
-        next
+        return
         require 'pry'; binding.pry
       end
 
@@ -57,19 +77,23 @@ class GitLabGroupGithubIntegration
       github_integration_status = has_github_integration ? github_integration['properties']['repository_url'] : '**NO GITHUB INTEGRATION**'
       puts "    #{github_integration_status}"
 
+    require 'pry'; binding.pry
       # puts "   - #{project['web_url']}/-/settings/integrations"
-      unless has_github_integration
-        skip = dry_run
+      unless has_github_integration && !force
         puts "   - #{project['web_url']}"
-        if skip
+        if dry_run
           warn "   - SKIPPING: because dry_run = true"
-          next
+          return
         end
+        if has_github_integration && force
+          warn "   - FORCING: API update over previous integration"
+        end
+
         # https://docs.gitlab.com/ee/api/services.html#createedit-github-service
         github_url = project['web_url'].gsub('gitlab.com', 'github.com')
 
         begin
-          @client.change_service(project['id'], :github, { token: token, repository_url: github_url, static_context: true })
+          @client.change_service(project['id'], :github, { token: github_token, repository_url: github_url, static_context: true })
           github_integration = @client.service(project['id'], 'github').to_h
           github_integration_status = !github_integration['id'].nil? ? github_integration['properties']['repository_url'] : '**NO GITHUB INTEGRATION**'
           puts "  -- Updated: #{project['name'].ljust(name_padding-11)}   #{github_integration_status}"
@@ -85,7 +109,6 @@ class GitLabGroupGithubIntegration
         end
       end
       project
-    end
   end
 end
 
@@ -93,4 +116,9 @@ options = GitLabClientOptionsParser.new.parse!
 github_integrations_for_gitlab_group = GitLabGroupGithubIntegration.new(options)
 
 # Default to dry run, unless DRY_RUN is set to 'yes'
-github_integrations_for_gitlab_group.ensure! ( ENV['DRY_RUN'].nil? || ENV['DRY_RUN'] == 'yes')
+dry_run  = ( ENV['DRY_RUN'].nil? || ENV['DRY_RUN'] == 'yes')
+if ARGV.empty?
+  github_integrations_for_gitlab_group.ensure!(dry_run)
+else
+  github_integrations_for_gitlab_group.ensure_projects!(ARGV, dry_run)
+end
